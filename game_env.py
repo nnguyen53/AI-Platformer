@@ -1,12 +1,26 @@
 import pygame
 import sys
 
+from raycasts import Raycasts
+
+OBJECT_TYPES = {
+    "none": 0,
+    "platform": 1,
+    "wall": 2,
+    "lava": 3,
+    "star": 4
+}
+
+DRAW_RAYCASTS = True
+
 class FloorIsLavaEnv:
     def __init__(self):
         self.width = 800
         self.height = 600
         self.current_level = 1  # Set to a certain level for current testing layout
         self.lava_y = 570       # Position of the red lava bar
+        self.raycasts = Raycasts(self)
+        self.raycast_data = []
         
         # Define the 3 maps (Collaborating with Preita's coordinates)
         self.level_maps = {
@@ -52,7 +66,25 @@ class FloorIsLavaEnv:
     
     def _get_state(self):
         """Returns raw sensor data vectors needs for pyTorch features"""
-        return (self.player_x, self.player_y, self.vel_x, self.vel_y)
+        state = [
+            self.player_x + 15,
+            self.player_y + 15,
+            self.vel_x,
+            self.vel_y,
+            self.goal.x - self.player_x,
+            self.goal.y - self.player_y,
+            int(self.is_grounded),
+        ]
+
+        for dist, obj_type, _, _ in self.raycast_data:
+            state.extend(
+                [
+                    dist,
+                    OBJECT_TYPES[obj_type]
+                ]
+            )
+
+        return tuple(state)
     
     def step(self, action):
 
@@ -138,6 +170,8 @@ class FloorIsLavaEnv:
                 self.current_level = 1
                 
             return self._get_state(), self.done
+        
+        self.raycast_data = self.raycasts.cast_all_rays()
 
         return self._get_state(), self.done
 
@@ -157,6 +191,19 @@ class FloorIsLavaEnv:
         
         # Draw Player State Node (Green Circle)
         pygame.draw.circle(surface, (112, 173, 71), (int(self.player_x) + 15, int(self.player_y) + 15), 15)
+
+        # Draw raycasts
+
+        if DRAW_RAYCASTS:
+            for ray in self.raycast_data:
+                x = self.player_x + 15
+                y = self.player_y + 15
+                dist, _, dx, dy = ray
+
+                end_x = x + dx * dist
+                end_y = y + dy * dist
+
+                pygame.draw.line(surface, (255, 255, 255), (x, y), (end_x, end_y))
         
         # Render Level Title Display Text
         font = pygame.font.SysFont("Calibri", 24, bold=True)
