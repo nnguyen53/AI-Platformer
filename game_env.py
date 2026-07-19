@@ -37,7 +37,7 @@ STALL_LIMIT = 420 # 7 seconds with no new platforms discovered - reset and give 
 
 NETWORK_SAVE_FILE_NAME = "checkpoints/overnight_run"
 SAVE_FREQUENCY = 50
-NETWORK_LOAD_PATH = "checkpoints/solveslevel4.npz"
+NETWORK_LOAD_PATH = None  # set to None to start training from scratch, otherwise load a pre-trained network
 
 ALPHA = 0.6  # constants to determine how significant priorities are in training
 BETA_START = 0.4
@@ -51,7 +51,7 @@ class FloorIsLavaEnv:
     def __init__(self):
         self.width = 800
         self.height = 600
-        self.current_level = 4  # Set to a certain level for current testing layout
+        self.current_level = 1  # Set to a certain level for current testing layout
         self.lava_y = 570       # Position of the red lava bar
         self.raycasts = Raycasts(self)
         self.raycast_data = []
