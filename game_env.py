@@ -3,55 +3,22 @@ import sys
 import numpy as np
 import math
 import random
+import json
 from collections import deque
 from copy import deepcopy
 
 from raycasts import Raycasts
 from neural_network import NeuralNetwork
 from layer import Layer
-from helpers import listToColumn
-
-OBJECT_TYPES = {
-    "none": 0,
-    "platform": 1,
-    "wall": 2,
-    "lava": 3,
-    "star": 4
-}
-
-REWARDS = {
-    "DISTANCE": 0.001,
-    "NEW_PLATFORM_BASE": 1.5,
-    "NEW_PLATFORM_INCREMENT": 0.25,
-    "NEW_CELL": 0,
-    "DEATH": -10,
-    "WIN": 10,
-    "LIVING_PENALTY": -0.015,
-    "FALSE_JUMP": -0.01,
-    "STALL": -8,
-}
-
-DRAW_RAYCASTS = True
-MAX_EPISODE_STEPS = 900 # 15 seconds per episode
-STALL_LIMIT = 420 # 7 seconds with no new platforms discovered - reset and give STALL penalty
-
-NETWORK_SAVE_FILE_NAME = "checkpoints/overnight_run"
-SAVE_FREQUENCY = 50
-NETWORK_LOAD_PATH = "checkpoints/solveslevel4.npz"
-
-ALPHA = 0.6  # constants to determine how significant priorities are in training
-BETA_START = 0.4
-BETA_END = 1.0
-BETA_FRAMES = 200_000  
-
-def get_beta(frame): 
-    return min(BETA_END, BETA_START + (BETA_END - BETA_START) * frame / BETA_FRAMES)
+from helpers import listToColumn, sample_batch
+from maps import MAPS
+from consts import *
 
 class FloorIsLavaEnv:
     def __init__(self):
         self.width = 800
         self.height = 600
-        self.current_level = 4  # Set to a certain level for current testing layout
+        self.current_level = 1  # Set to a certain level for current testing layout
         self.lava_y = 570       # Position of the red lava bar
         self.raycasts = Raycasts(self)
         self.raycast_data = []
@@ -71,38 +38,11 @@ class FloorIsLavaEnv:
         self.next_episode_id = 1
         self.episode_steps = 0
         self.steps_since_progress = 0
-        
-        # Define the 3 maps (Collaborating with Preita's coordinates)
-        self.level_maps = {
-            1: {
-                "platforms": [pygame.Rect(50, 500, 180, 20), pygame.Rect(280, 420, 150, 20), pygame.Rect(400, 340, 150, 20)],
-                "player_start": (100, 450),
-                "star": pygame.Rect(540, 290, 30, 30)
-            },
-            2: {
-                "platforms": [pygame.Rect(50, 520, 120, 20), pygame.Rect(220, 440, 120, 20), pygame.Rect(400, 480, 100, 20), pygame.Rect(590, 360, 160, 20)],
-                "player_start": (80, 470),
-                "star": pygame.Rect(620, 310, 30, 30)
-            },
-            3: {
-                # Level 3: hardest map
-                "platforms": [
-                    pygame.Rect(50, 550, 150, 20), #plat1 - lowest
-                    pygame.Rect(250, 420, 100, 20), #plat2 - second to lowest
-                    pygame.Rect(100, 250, 120, 20), #plat 3 - next to highest
-                    pygame.Rect(300, 175, 200, 20), #highest plat
-                    pygame.Rect(380, 350, 30, 20) # small plarform
-                ],
-                "player_start": (70, 500),
-                "star": pygame.Rect(550, 120, 30, 30)
-            },
-            # Level 4: added for testing
-            4: {
-                "platforms": [pygame.Rect(50, 500, 180, 20), pygame.Rect(280, 420, 150, 20), pygame.Rect(400, 340, 150, 20), pygame.Rect(230, 280, 100, 20)],
-                "player_start": (100, 450),
-                "star": pygame.Rect(250, 220, 30, 30)
-            },
-        }
+        self.level_maps = MAPS
+        self.level_results = {}
+
+        for id, map in self.level_maps.items():
+            self.level_results[id] = []
         self.reset()
 
     def distance_to_goal(self):
@@ -128,16 +68,9 @@ class FloorIsLavaEnv:
         self.visited_cells = []
         self.visited_platfoms = [self.platforms[0]]
 
-        # log results of greedy episodes (where the AI agent is on its own with no random actions mixed in)
-        if len(self.episodes) > 1 and self.current_episode["greedy"]:
-
-            print("GREEDY EPISODE")
-            print("REWARD: " + str(self.current_episode["reward"]))
-            print("SECONDS: " + str(self.current_episode["frames"] / 60))
-            print("WON? " + str(self.current_episode["won"]))
-
         self.current_episode = {
             "id": self.next_episode_id,
+            "level": self.current_level,
             "reward": 0,
             "epsilon": 1,
             "frames": 0,
@@ -163,6 +96,16 @@ class FloorIsLavaEnv:
             print("REWARD: " + str(reward_sum / SAVE_FREQUENCY))
             print("SECONDS PER ATTEMPT: " + str(frames_sum / 60 / SAVE_FREQUENCY))
             print("WIN %: " + str(wins / SAVE_FREQUENCY * 100))
+
+            for num, results in env.level_results.items():
+                attempts = len(results)
+
+                if attempts > 20:
+                    results = results[-20:]
+                
+                wins = sum(results)
+                print(f"LEVEL {num}: {wins / len(results) * 100}%")
+                print(f"ATTEMPTED: {attempts / self.current_episode["id"] * 100 }%")
 
         self.next_episode_id += 1
 
@@ -279,11 +222,6 @@ class FloorIsLavaEnv:
             self.current_episode["won"] = True
             reward += REWARDS["WIN"]
 
-            if self.current_level < len(self.level_maps):
-                self.current_level += 1
-            else:
-                self.current_level = 1
-
         # reward the agent for visiting a new part of the map - THIS REWARD IS CURRENTLY 0, will likely remove
         cell = (int(self.player_x // 40), int(self.player_y // 40))
         if cell not in self.visited_cells:
@@ -367,9 +305,9 @@ if __name__ == "__main__":
     running = True
     state = None
     # epsilon - the probability that the agent's action gets picked randomly
-    epsilon = 0.3 # exploring random actions first helps the agent learn what works and what doesn't
-    replay_buffer = deque(maxlen=50000) # saved experiences that the agent can learn from
-    priorities = deque(maxlen=50000) # priorities of experiences - those where the neural network predicted more incorrectly should be trained on more
+    epsilon = 0.4 # exploring random actions first helps the agent learn what works and what doesn't
+    replay_buffers = {lvl: deque(maxlen=PER_LEVEL_CAP) for lvl in MAPS} # saved experiences that the agent can learn from
+    priorities = {lvl: deque(maxlen=PER_LEVEL_CAP) for lvl in MAPS} # priorities of experiences - those where the neural network predicted more incorrectly should be trained on more
     frame_count = 0
     total_frames = 0
     total_updates = 0
@@ -416,14 +354,15 @@ if __name__ == "__main__":
 
         # save every decision and its outcomes in the replay buffer for training
         if state is not None and not greedy:
-            replay_buffer.append([
+            lvl = env.current_level
+            replay_buffers[lvl].append([
                 state,
                 agent_action,
                 reward,
                 next_state,
                 done,
             ])
-            priorities.append(max(priorities, default=1.0)) # give new experiences max priority automatically
+            priorities[lvl].append(max(priorities[lvl], default=1.0)) # give new experiences max priority automatically
 
         state = next_state
 
@@ -431,20 +370,11 @@ if __name__ == "__main__":
             env.target_network = deepcopy(env.network) # target network outputs are copied periodically, and is what we use to determine target output and compute error 
             # we need a target network so the we're not constantly training the network we're trying to match the outputs of
 
-        if len(replay_buffer) >= 5000 and total_frames % 4 == 0 and not greedy:
-            priority_arr = np.array(priorities, dtype=np.float64) ** ALPHA
-            probs = priority_arr / priority_arr.sum()
+        if total_frames >= 5000 and total_frames % 4 == 0 and not greedy:
+            batch = sample_batch(total_frames, replay_buffers, priorities)
 
-            indices = np.random.choice(len(replay_buffer), size=32, p=probs, replace=True) # pick experiences to learn from based on priorities
-
-            beta = get_beta(total_frames)
-            weights = (len(replay_buffer) * probs[indices]) ** (-beta) # progressively weigh updates more evenly as time goes on
-            weights /= weights.max()  # normalize so max weight = 1, keeps updates stable
-
-            buf_snapshot = list(replay_buffer)  # O(n) once per batch, avoids O(n) per-index deque access
-
-            for idx, is_weight in zip(indices, weights):
-                _state, _agent_action, _reward, _next_state, _done = buf_snapshot[idx]
+            for lvl, idx, is_weight in batch:
+                _state, _agent_action, _reward, _next_state, _done = replay_buffers[lvl][idx]
 
                 prediction, caches = env.network.run(_state)
                 online_next, _ = env.network.run(_next_state)
@@ -458,7 +388,7 @@ if __name__ == "__main__":
                     target[_agent_action] = _reward + 0.99 * target_next[best_action] # update the target (correct value for chosen action) based on outcomes from the next couple frames
 
                 td_error = abs(float(target[_agent_action][0]) - float(prediction[_agent_action][0]))
-                priorities[idx] = td_error + 1e-5  # avoid a priority of exactly 0, which would make it unsamplable
+                priorities[lvl][idx] = td_error + 1e-5  # avoid a priority of exactly 0, which would make it unsamplable
 
                 # train the network
                 env.network.backpropagate(prediction, target, caches, weight=is_weight)
@@ -470,11 +400,16 @@ if __name__ == "__main__":
             env.current_episode["epsilon"] = epsilon
             env.current_episode["frames"] = frame_count
             env.current_episode["greedy"] = greedy
+
+            env.level_results[env.current_episode["level"]].append(int(env.current_episode["won"]))
+
             env.episodes.append(env.current_episode)
 
+            env.current_level = random.randint(1, len(env.level_maps))
+
             # slowly decay epsilon, but always keep a little randomness in to encourage exploration
-            epsilon *= 0.995
-            epsilon = max(0.05, epsilon)
+            epsilon *= 0.99975
+            epsilon = max(0.2, epsilon)
 
             frame_count = 0
             state = env.reset()
@@ -483,4 +418,8 @@ if __name__ == "__main__":
         total_frames += 1
             
     pygame.quit()
+
+    with open("results.json", "w") as file:
+        json.dump(env.level_results, file, indent=4)
+
     sys.exit()
