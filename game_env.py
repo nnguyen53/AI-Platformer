@@ -19,6 +19,7 @@ class FloorIsLavaEnv:
         self.width = 800
         self.height = 600
         self.current_level = 1  # Set to a certain level for current testing layout
+        self.current_level = 1  # Set to a certain level for current testing layout
         self.lava_y = 570       # Position of the red lava bar
         self.raycasts = Raycasts(self)
         self.raycast_data = []
