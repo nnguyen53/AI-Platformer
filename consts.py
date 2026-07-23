@@ -26,7 +26,7 @@ STALL_LIMIT = 420
 
 NETWORK_SAVE_FILE_NAME = "checkpoints/overnight_run"
 SAVE_FREQUENCY = 50
-NETWORK_LOAD_PATH = "checkpoints/overnight_run-50.npz"
+NETWORK_LOAD_PATH = "checkpoints/beats11levels.npz"
 
 NUM_LEVELS = len(MAPS)
 PER_LEVEL_CAP = 50000 // NUM_LEVELS
