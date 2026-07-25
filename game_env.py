@@ -98,15 +98,17 @@ class FloorIsLavaEnv:
             print("SECONDS PER ATTEMPT: " + str(frames_sum / 60 / SAVE_FREQUENCY))
             print("WIN %: " + str(wins / SAVE_FREQUENCY * 100))
 
-            for num, results in env.level_results.items():
+            for num, results in self.level_results.items():  # modified - was 'env.level_results', which doesn't exist inside the class; should reference 'self'
                 attempts = len(results)
 
                 if attempts > 20:
                     results = results[-20:]
                 
                 wins = sum(results)
-                print(f"LEVEL {num}: {wins / len(results) * 100}%")
-                print(f"ATTEMPTED: {attempts / self.current_episode["id"] * 100 }%")
+                win_rate = (wins / len(results) * 100) if len(results) > 0 else 0.0 #modified - ZeroDivisionError fixed by checking if len(results) > 0 before calculating win_rate
+    
+                print(f"LEVEL {num}: {win_rate:.1f}%")
+                print(f"ATTEMPTED: {attempts / self.current_episode['id'] * 100:.1f}%")
 
         self.next_episode_id += 1
 
@@ -295,15 +297,66 @@ class FloorIsLavaEnv:
         pygame.display.flip()
 
     
-if __name__ == "__main__":
-    pygame.init()
-    screen = pygame.display.set_mode((800, 600))
-    pygame.display.set_caption("Game Env Testing Room")
-    clock = pygame.time.Clock()
-    
+# ==================== Menu / Pause UI  ==============================
+
+def draw_button(surface, rect, label, hovered=False):  
+    color = (70, 120, 180) if not hovered else (100, 160, 220)
+    pygame.draw.rect(surface, color, rect, border_radius=8)
+    pygame.draw.rect(surface, (255, 255, 255), rect, 3, border_radius=8)
+
+    font = pygame.font.SysFont("Calibri", 28, bold=True)
+    text_surf = font.render(label, True, (255, 255, 255))
+    text_rect = text_surf.get_rect(center=rect.center)
+    surface.blit(text_surf, text_rect)
+
+
+def draw_menu(screen, buttons, hovered_button):  
+    screen.fill((12, 15, 24))
+
+    title_font = pygame.font.SysFont("Calibri", 46, bold=True)
+    title_surf = title_font.render("FLOOR IS LAVA", True, (255, 255, 255))
+    screen.blit(title_surf, (255, 90))
+
+    subtitle_font = pygame.font.SysFont("Calibri", 20)
+    subtitle_surf = subtitle_font.render("Choose how you want to play", True, (200, 200, 200))
+    screen.blit(subtitle_surf, (255, 150))
+
+    for name, rect in buttons.items():
+        draw_button(screen, rect, name.replace("_", " ").title(), hovered=name == hovered_button)
+
+    pygame.display.flip()
+
+
+def draw_pause_overlay(screen):  
+    overlay = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
+    overlay.fill((10, 10, 15, 180))  # semi-transparent dark tint so the frozen game is still visible behind it
+    screen.blit(overlay, (0, 0))
+
+    title_font = pygame.font.SysFont("Calibri", 40, bold=True)
+    title_surf = title_font.render("PAUSED", True, (255, 255, 255))
+    title_rect = title_surf.get_rect(center=(screen.get_width() // 2, screen.get_height() // 2 - 30))
+    screen.blit(title_surf, title_rect)
+
+    hint_font = pygame.font.SysFont("Calibri", 22)
+    hint_surf = hint_font.render("Press ESC to Resume  |  Press Q to Quit to Menu", True, (210, 210, 210))
+    hint_rect = hint_surf.get_rect(center=(screen.get_width() // 2, screen.get_height() // 2 + 20))
+    screen.blit(hint_surf, hint_rect)
+
+    pygame.display.flip()
+
+
+def save_results(env, path="results.json"):  
+    """Persists per-level win/loss results - pulled out of __main__ so both a
+    hard quit and a quit-to-menu can save training progress"""
+    with open(path, "w") as file:
+        json.dump(env.level_results, file, indent=4)
+
+
+def run_ai_mode(screen, clock):  
     env = FloorIsLavaEnv()
-    
+
     running = True
+    paused = False  # tracks whether the game is currently paused
     state = None
     # epsilon - the probability that the agent's action gets picked randomly
     epsilon = 0.4 # exploring random actions first helps the agent learn what works and what doesn't
@@ -316,6 +369,24 @@ if __name__ == "__main__":
 
     while running:
         clock.tick(60)
+
+        # event handling moved to the top of the loop and now
+        # supports pausing (ESC) and quitting back to the menu (Q while paused)
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                save_results(env)  
+                pygame.quit()
+                sys.exit()
+            if event.type == pygame.KEYDOWN:  
+                if event.key == pygame.K_ESCAPE:
+                    paused = not paused  # first press pauses, second press resumes
+                elif event.key == pygame.K_q and paused:
+                    save_results(env) 
+                    return
+
+        if paused:  
+            draw_pause_overlay(screen)
+            continue  # skip all game logic and training while paused
 
         move_action = 0
         jump_action = False
@@ -346,10 +417,6 @@ if __name__ == "__main__":
 
         if keys[pygame.K_w] or keys[pygame.K_SPACE] or agent_action in [3, 4, 5]:
             jump_action = True
-
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
 
         next_state, reward, done = env.step((move_action, jump_action))
 
@@ -417,10 +484,84 @@ if __name__ == "__main__":
 
         frame_count += 1
         total_frames += 1
-            
-    pygame.quit()
 
-    with open("results.json", "w") as file:
-        json.dump(env.level_results, file, indent=4)
 
-    sys.exit()
+def run_manual_mode(screen, clock):  # let you play a level yourself, no AI/training involved
+    env = FloorIsLavaEnv()
+
+    running = True
+    paused = False  # tracks whether the game is currently paused
+    while running:
+        clock.tick(60)
+
+        for event in pygame.event.get():  # supports pausing (ESC) and quitting back to the menu (Q while paused)
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    paused = not paused  # first press pauses, second press resumes
+                elif event.key == pygame.K_q and paused:
+                    return  # quit back to the main menu while paused
+
+        if paused:  
+            draw_pause_overlay(screen)
+            continue  # skip all game logic while paused
+
+        move_action = 0
+        jump_action = False
+
+        keys = pygame.key.get_pressed()
+        if keys[pygame.K_a]:
+            move_action = 1
+        elif keys[pygame.K_d]:
+            move_action = 2
+
+        if keys[pygame.K_w] or keys[pygame.K_SPACE]:
+            jump_action = True
+
+        env.step((move_action, jump_action))
+        env.render(screen)
+
+        if env.done:
+            if env.current_episode["won"]:  # advance to the next level on a win, wrapping back to level 1 after the last one
+                env.current_level = env.current_level + 1 if env.current_level < len(env.level_maps) else 1
+            env.reset()
+
+
+if __name__ == "__main__":
+    pygame.init()
+    screen = pygame.display.set_mode((800, 600))
+    pygame.display.set_caption("Game Env Testing Room")
+    clock = pygame.time.Clock()
+
+    buttons = {  # main menu buttons
+        "start": pygame.Rect(300, 220, 200, 60),
+        "play_manual": pygame.Rect(300, 320, 200, 60),
+        "quit_game": pygame.Rect(300, 420, 200, 60),
+    }
+
+    while True:  # main menu loop
+        clock.tick(60)
+
+        mouse_pos = pygame.mouse.get_pos()
+        hovered_button = None
+        for name, rect in buttons.items():
+            if rect.collidepoint(mouse_pos):
+                hovered_button = name
+                break
+
+        draw_menu(screen, buttons, hovered_button)
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                if buttons["start"].collidepoint(mouse_pos):
+                    run_ai_mode(screen, clock)
+                elif buttons["play_manual"].collidepoint(mouse_pos):
+                    run_manual_mode(screen, clock)
+                elif buttons["quit_game"].collidepoint(mouse_pos):
+                    pygame.quit()
+                    sys.exit()
