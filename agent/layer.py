@@ -1,4 +1,4 @@
-from helpers import he_initialize, reLu
+from utils.helpers import he_initialize, reLu
 import numpy as np
 
 class Layer:
