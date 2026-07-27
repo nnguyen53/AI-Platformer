@@ -2,6 +2,7 @@ import pygame
 import sys
 import numpy as np
 import math
+import os
 
 from agent.raycasts import Raycasts
 from agent.neural_network import NeuralNetwork
@@ -11,6 +12,16 @@ from utils.helpers import listToColumn
 from game.maps import MAPS
 from game.config import GameConfig
 from utils.consts import *
+
+# folder for the game assets (sprites, tiles, etc.) is located in the parent directory of this file
+GAME_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(GAME_DIR)
+
+ASSET_DIR = os.path.join(PROJECT_ROOT, "assets")
+CHARACTER_ASSET_DIR = os.path.join(ASSET_DIR, "MainCharacters", "NinjaFrog")
+TERRAIN_ASSET_DIR = os.path.join(ASSET_DIR, "Terrain")
+OTHER_ASSET_DIR = os.path.join(ASSET_DIR, "Other")
+BACKGROUND_ASSET_DIR = os.path.join(ASSET_DIR, "Background")
 
 class FloorIsLavaEnv:
     def __init__(self):
@@ -37,7 +48,63 @@ class FloorIsLavaEnv:
         self.episode_steps = 0
         self.steps_since_progress = 0
         self.level_maps = MAPS
+        self.level_results = {}
         self.reset()
+
+        # player sprites
+        self.sprite_size = 32  # each individual frame in the sheets is 32x32
+        self.sprites = {
+            "idle": self._load_spritesheet(os.path.join(CHARACTER_ASSET_DIR, "idle.png")),
+            "run": self._load_spritesheet(os.path.join(CHARACTER_ASSET_DIR, "run.png")),
+            "jump": self._load_spritesheet(os.path.join(CHARACTER_ASSET_DIR, "jump.png")),
+            "fall": self._load_spritesheet(os.path.join(CHARACTER_ASSET_DIR, "fall.png")),
+        }
+        self.facing = "right"       # "right" or "left"
+        self.animation_count = 0    # Continuous frame tick counter
+        self.ANIMATION_DELAY = 5    # Increase this number to slow down the animation
+        self.current_sprite = None
+        self.current_sheet_name = "idle"
+
+        # platform tile 
+        self.brick_tile = self._load_tile(os.path.join(TERRAIN_ASSET_DIR, "Terrain.png"), col=18, row=5)
+
+        # goal star image
+        self.star_image = self._load_image(os.path.join(OTHER_ASSET_DIR, "star.png"))
+
+        # background & lava images 
+        # pre-scaled once here (instead of every frame in render()) since neither
+        # the window size nor the lava_y line height change during play.
+        mountain_raw = self._load_image(os.path.join(BACKGROUND_ASSET_DIR, "mountain.png"))
+        self.mountain_bg = pygame.transform.scale(mountain_raw, (self.width, self.height))
+
+        lava_raw = self._load_image(os.path.join(OTHER_ASSET_DIR, "lava.png"))
+        lava_h = self.height - self.lava_y
+        self.lava_image = pygame.transform.scale(lava_raw, (self.width, lava_h))
+
+        for id, map in self.level_maps.items():
+            self.level_results[id] = []
+        self.reset()
+
+    def _load_spritesheet(self, path):  
+        """Slices a horizontal sprite sheet into a list of individual frame surfaces"""
+        sheet = pygame.image.load(path).convert_alpha()
+        frame_size = self.sprite_size
+        num_frames = sheet.get_width() // frame_size
+        frames = []
+        for i in range(num_frames):
+            frame = sheet.subsurface((i * frame_size, 0, frame_size, frame_size)).copy()
+            frames.append(frame)
+        return frames
+
+    def _load_tile(self, path, col, row, tile_size=16):  
+        """Crops a single tile_size x tile_size tile out of a larger grid-based tileset sheet"""
+        sheet = pygame.image.load(path).convert_alpha()
+        box = (col * tile_size, row * tile_size, tile_size, tile_size)
+        return sheet.subsurface(box).copy()
+
+    def _load_image(self, path):  
+        """Loads a single standalone image (not a sheet) at its native size"""
+        return pygame.image.load(path).convert_alpha()
 
     def load_network(self):
         if self.game_config.NETWORK_LOAD_PATH is not None:
@@ -200,6 +267,8 @@ class FloorIsLavaEnv:
         self.episode_steps += 1
         self.steps_since_progress += 1
 
+        self.update_sprite()
+
         # end every episode after 15 seconds
 
         if self.game_config.AI_MODE:
@@ -214,23 +283,68 @@ class FloorIsLavaEnv:
             self.current_episode["reward"] += reward
 
         return self._get_state(), reward, self.done
+    
+    def update_sprite(self):
+        sprite_sheet = "idle"
+
+        # Determine which sheet to use based on physics velocity
+        if not self.is_grounded and self.vel_y < 0:
+            sprite_sheet = "jump"
+        elif not self.is_grounded and self.vel_y > 0.8:  # Tolerance threshold for falling
+            sprite_sheet = "fall"
+        elif self.vel_x != 0:
+            sprite_sheet = "run"
+
+        # Track facing direction
+        if self.vel_x > 0:
+            self.facing = "right"
+        elif self.vel_x < 0:
+            self.facing = "left"
+
+        # Reset counter if player switched to a different action state
+        if sprite_sheet != self.current_sheet_name:
+            self.current_sheet_name = sprite_sheet
+            self.animation_count = 0
+
+        sprites = self.sprites[sprite_sheet]
+        
+        # Calculate frame index using floor division
+        sprite_index = (self.animation_count // self.ANIMATION_DELAY) % len(sprites)
+        sprite = sprites[sprite_index]
+
+        # Flip horizontally if moving left
+        if self.facing == "left":
+            sprite = pygame.transform.flip(sprite, True, False)
+
+        # Scale sprite to render size (40x40)
+        self.current_sprite = pygame.transform.scale(sprite, (40, 40))
+        
+        # Increment global animation tick counter
+        self.animation_count += 1
 
     def render(self, surface):
         """Draws the assets layout to the screen canvas"""
-        surface.fill((20, 20, 20)) # Dark background matrix
+        surface.blit(self.mountain_bg, (0, 0)) # Mountain background image
         
-        # Draw Platforms (blue rec)
+        # Draw Platforms (tiled orange brick sprite instead of a flat blue rectangle)
+        tile_w, tile_h = self.brick_tile.get_size()
         for platform in self.platforms:
-            pygame.draw.rect(surface, (31, 78, 120), platform)
+            surface.set_clip(platform)  # keep tiles from spilling past the platform's edges when its size isn't an exact multiple of the tile size
+            for tx in range(platform.left, platform.right, tile_w):
+                for ty in range(platform.top, platform.bottom, tile_h):
+                    surface.blit(self.brick_tile, (tx, ty))
+            surface.set_clip(None)  # reset the clip so it doesn't affect anything drawn afterward
             
         # Draw Target Goal Zone (Yellow Star)
-        pygame.draw.rect(surface, (255, 192, 0), self.goal)
+        scaled_star = pygame.transform.scale(self.star_image, self.goal.size)
+        surface.blit(scaled_star, self.goal.topleft)
         
         # Draw Danger Zone Hazard Line (Red Lava)
-        pygame.draw.rect(surface, (192, 0, 0), (0, self.lava_y, self.width, self.height - self.lava_y))
+        surface.blit(self.lava_image, (0, self.lava_y))
         
-        # Draw Player State Node (Green Circle)
-        pygame.draw.circle(surface, (112, 173, 71), (int(self.player_x) + 15, int(self.player_y) + 15), 15)
+        # Draw Player Sprite
+        if self.current_sprite is not None:
+            surface.blit(self.current_sprite, (int(self.player_x) - 5, int(self.player_y) - 5))
 
         # Draw raycasts
         if self.game_config.DRAW_RAYCASTS:
