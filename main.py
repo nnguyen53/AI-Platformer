@@ -25,7 +25,7 @@ if __name__ == "__main__":
         "Start_Training": pygame.Rect(300, 380, 200, 60)
     }
 
-    dropdown_font = pygame.font.SysFont("Calibri", 20)
+    dropdown_font = pygame.font.Font(GAME_FONT, 20)
 
     model_dropdown = Dropdown(screen, 300, 155, 140, 40, 
                               name="Untrained", 

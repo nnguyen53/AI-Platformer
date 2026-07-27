@@ -1,4 +1,5 @@
 from game.maps import MAPS
+from utils.helpers import resource_path
 
 OBJECT_TYPES = {
     "none": 0,
@@ -17,3 +18,6 @@ SAVE_FREQUENCY = 50
 
 NUM_LEVELS = len(MAPS)
 BUFFER_CAP = 50000 
+
+GAME_FONT = resource_path("assets/Fonts/Calibri.ttf")
+GAME_FONT_BOLD = resource_path("assets/Fonts/Calibribold.ttf")

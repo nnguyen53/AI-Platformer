@@ -12,12 +12,13 @@ from utils.helpers import listToColumn
 from game.maps import MAPS
 from game.config import GameConfig
 from utils.consts import *
+from utils.helpers import resource_path
 
 # folder for the game assets (sprites, tiles, etc.) is located in the parent directory of this file
 GAME_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(GAME_DIR)
 
-ASSET_DIR = os.path.join(PROJECT_ROOT, "assets")
+ASSET_DIR = resource_path("assets")
 CHARACTER_ASSET_DIR = os.path.join(ASSET_DIR, "MainCharacters", "NinjaFrog")
 TERRAIN_ASSET_DIR = os.path.join(ASSET_DIR, "Terrain")
 OTHER_ASSET_DIR = os.path.join(ASSET_DIR, "Other")
@@ -108,7 +109,7 @@ class FloorIsLavaEnv:
 
     def load_network(self):
         if self.game_config.NETWORK_LOAD_PATH is not None:
-            self.network.load(self.game_config.NETWORK_LOAD_PATH)
+            self.network.load(resource_path(self.game_config.NETWORK_LOAD_PATH))
 
     def distance_to_goal(self):
         return math.sqrt(math.pow(self.player_x - self.goal.x, 2) + math.pow(self.player_y - self.goal.y, 2))
@@ -359,7 +360,7 @@ class FloorIsLavaEnv:
                 pygame.draw.line(surface, (255, 255, 255), (x, y), (end_x, end_y))
         
         # Render Level Title Display Text
-        font = pygame.font.SysFont("Calibri", 24)
+        font = pygame.font.Font(GAME_FONT, 24)
         text_surf = font.render(f"Current Level: {self.current_level}", True, (255, 255, 255))
         surface.blit(text_surf, (20, 20))
 

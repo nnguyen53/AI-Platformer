@@ -1,5 +1,6 @@
 import numpy as np
-import json
+import sys
+import os
 from utils.consts import *
 from game.maps import MAPS
 
@@ -45,11 +46,13 @@ def sample_batch(total_frames, replay_buffer, priorities, agent_config):
 
     return batch
 
-def save_results(env, path="results.json"):  
-    """Persists per-level win/loss results - pulled out of __main__ so both a
-    hard quit and a quit-to-menu can save training progress"""
-    with open(path, "w") as file:
-        json.dump(env.level_results, file, indent=4)
+def resource_path(relative_path):
+    if hasattr(sys, "_MEIPASS"):
+        base_path = sys._MEIPASS
+    else:
+        # helpers.py is at PROJECT_ROOT/utils/helpers.py, so go up twice
+        base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base_path, relative_path)
 
 def draw_multiline_text(surface, text, font, color, pos):
     x, y = pos

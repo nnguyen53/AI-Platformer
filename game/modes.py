@@ -17,7 +17,7 @@ def run_ai_mode(screen, clock, model_path, level):
 
     env.load_network()
     env.reset()
-    
+
     peak = MAPS[level]["peak_win_rate"] if model_path else 0.0
 
     running = True
@@ -40,7 +40,6 @@ def run_ai_mode(screen, clock, model_path, level):
         # supports pausing (ESC) and quitting back to the menu (Q while paused)
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                save_results(env)  
                 pygame.quit()
                 sys.exit()
             if event.type == pygame.KEYDOWN:  
