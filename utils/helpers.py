@@ -27,10 +27,16 @@ def listToColumn(values):
 
 
 def get_beta(frame, agent_config): 
+    """
+    Get the current beta based on how many frames have passed. Higher beta means higher priorities don't matter as much in backpropagation.
+    """
     return min(agent_config.BETA_END, 
                agent_config.BETA_START + (agent_config.BETA_END - agent_config.BETA_START) * frame / agent_config.BETA_FRAMES)
 
 def sample_batch(total_frames, replay_buffer, priorities, agent_config):
+    """
+    Sample a batch according to a prioritized replay buffer
+    """
     beta = get_beta(total_frames, agent_config)
     batch = []
 
@@ -47,6 +53,9 @@ def sample_batch(total_frames, replay_buffer, priorities, agent_config):
     return batch
 
 def resource_path(relative_path):
+    """
+    Get the resource path for an asset (used in loading files for the dist build)
+    """
     if hasattr(sys, "_MEIPASS"):
         base_path = sys._MEIPASS
     else:
@@ -55,6 +64,9 @@ def resource_path(relative_path):
     return os.path.join(base_path, relative_path)
 
 def draw_multiline_text(surface, text, font, color, pos):
+    """
+    Helper line to draw multiple lines of text separated by newline characters
+    """
     x, y = pos
     lines = text.split('\n')
     

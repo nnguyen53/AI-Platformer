@@ -1,7 +1,6 @@
 import pygame
 import random
 import sys
-import utils.consts as consts
 from utils.consts import *
 from game.game_env import FloorIsLavaEnv
 from collections import deque
@@ -9,7 +8,8 @@ from copy import deepcopy
 from utils.helpers import *
 from game.menu import draw_pause_overlay
 
-def run_ai_mode(screen, clock, model_path, level):  
+def run_ai_mode(screen, clock, model_path, level):
+    """Runs the game in AI mode using the provided UI objects, model path, and level"""  
     env = FloorIsLavaEnv()
 
     env.game_config.NETWORK_LOAD_PATH = model_path
@@ -47,6 +47,9 @@ def run_ai_mode(screen, clock, model_path, level):
                     paused = not paused  # first press pauses, second press resumes
                 elif event.key == pygame.K_q and paused:
                     return
+            elif event.type == pygame.KEYUP:
+                if event.key == pygame.K_d and not paused:
+                    env.game_config.DEBUG_MODE = not env.game_config.DEBUG_MODE
 
         if paused:  
             draw_pause_overlay(screen)
@@ -64,17 +67,15 @@ def run_ai_mode(screen, clock, model_path, level):
             else:
                 prediction, _ = env.network.run(state)
                 agent_action = np.argmax(prediction)
-    
-        keys = pygame.key.get_pressed()
         
         # agent actions 
         # 0 - idle, 1 - left, 2 - right, 3 - left + jump, 4 - right + jump, 5 - jump
-        if keys[pygame.K_a] or agent_action in [1, 3]:
+        if agent_action in [1, 3]:
             move_action = 1
-        elif keys[pygame.K_d] or agent_action in [2, 4]:
+        elif agent_action in [2, 4]:
             move_action = 2
 
-        if keys[pygame.K_w] or keys[pygame.K_SPACE] or agent_action in [3, 4, 5]:
+        if agent_action in [3, 4, 5]:
             jump_action = True
 
         next_state, reward, done = env.step((move_action, jump_action))
@@ -139,10 +140,11 @@ def run_ai_mode(screen, clock, model_path, level):
         total_frames += 1
 
 
-def run_manual_mode(screen, clock):  # let you play a level yourself, no AI/training involved
+def run_manual_mode(screen, clock):  
+    """Runs the game with the user controlling the player, no AI involved"""
     env = FloorIsLavaEnv()
 
-    env.game_config.DRAW_RAYCASTS = False
+    env.game_config.DEBUG_MODE = False
     env.game_config.AI_MODE = False
     
     running = True

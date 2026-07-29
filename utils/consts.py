@@ -9,7 +9,6 @@ OBJECT_TYPES = {
     "star": 4
 }
 
-DRAW_RAYCASTS = True
 MAX_EPISODE_STEPS = 900 
 STALL_LIMIT = 420 
 

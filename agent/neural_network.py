@@ -28,13 +28,13 @@ class NeuralNetwork:
         learning_rate = 0.0005
 
         delta = prediction - target
-        delta = np.where(
+        delta = np.where( # clamp delta to prevent massive weight changes
             np.abs(delta) <= 1,
             delta,
             np.sign(delta)
         )
 
-        delta = delta * weight
+        delta = delta * weight # certain changes should be larger according to the weight (calculated via prioritized replay)
 
         delta = self.layers[-1].backward_pass(
             delta,
@@ -47,7 +47,7 @@ class NeuralNetwork:
                 reversed(self.layers[:-1]),
                 reversed(caches[:-1])
             ):
-            delta = layer.backward_pass(delta, learning_rate, cache)
+            delta = layer.backward_pass(delta, learning_rate, cache) # backpropagate through all layers using cached inputs and outputs
     
     def save(self, path):
         """

@@ -46,7 +46,7 @@ if __name__ == "__main__":
                             handleColour=(100, 160, 220),
                             valueColour=(110, 176, 242))
 
-    model_dropdown.hide()
+    model_dropdown.hide() # initially hide training config UI
     level_slider.hide()
 
     while True:  # main menu loop
@@ -55,10 +55,10 @@ if __name__ == "__main__":
         mouse_pos = pygame.mouse.get_pos()
         hovered_button = None
 
-        buttons = menu_buttons if selection_screen == 1 else training_buttons
+        buttons = menu_buttons if selection_screen == 1 else training_buttons # determine which buttons to used based on what screen is current
 
         for name, rect in buttons.items():
-            if rect.collidepoint(mouse_pos):
+            if rect.collidepoint(mouse_pos): # detect cursor hover
                 hovered_button = name
                 break
 
@@ -75,7 +75,7 @@ if __name__ == "__main__":
                 sys.exit()
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 if selection_screen == 1:
-                    if menu_buttons["Train_AI"].collidepoint(mouse_pos):
+                    if menu_buttons["Train_AI"].collidepoint(mouse_pos): # handle different button presses across screens
                         selection_screen = 2
                         model_dropdown.show()
                         level_slider.show()

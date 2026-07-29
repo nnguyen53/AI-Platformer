@@ -5,6 +5,7 @@ from game.maps import MAPS
 from agent.models import MODELS
 
 def draw_button(surface, rect, label, hovered=False):  
+    """Draws a button to the screen with a border and hover animations"""
     color = (70, 120, 180) if not hovered else (100, 160, 220)
     pygame.draw.rect(surface, color, rect, border_radius=8)
     pygame.draw.rect(surface, (255, 255, 255), rect, 3, border_radius=8)
@@ -16,6 +17,7 @@ def draw_button(surface, rect, label, hovered=False):
 
 
 def draw_menu(screen, buttons, hovered_button):  
+    """Draw the three-button main menu"""
     screen.fill((12, 15, 24))
 
     title_font = pygame.font.Font(GAME_FONT_BOLD, 46)
@@ -31,6 +33,7 @@ def draw_menu(screen, buttons, hovered_button):
 
 
 def draw_training_config(screen, model_dropdown, level_slider, buttons, hovered_button):
+    """Draw the training configuration screen (model and level selection)"""
     screen.fill((12, 15, 24))
 
     label_font = pygame.font.Font(GAME_FONT_BOLD, 30)
@@ -43,7 +46,7 @@ def draw_training_config(screen, model_dropdown, level_slider, buttons, hovered_
     model_label_surf = label_font.render("Select model:", True, (255, 255, 255))
     screen.blit(model_label_surf, (100, 160))
 
-    model = model_dropdown.getSelected() 
+    model = model_dropdown.getSelected() # Simulate a default selected value - Pygame widgets doesn't have this functionality
     if not model:
         model = MODELS["Untrained"]
 
@@ -60,6 +63,7 @@ def draw_training_config(screen, model_dropdown, level_slider, buttons, hovered_
 
 
 def draw_pause_overlay(screen):  
+    """Draw the pause overlay with options to resume or quit to menu"""
     overlay = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
     overlay.fill((10, 10, 15, 180))  # semi-transparent dark tint so the frozen game is still visible behind it
     screen.blit(overlay, (0, 0))

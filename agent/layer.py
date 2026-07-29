@@ -4,7 +4,7 @@ import numpy as np
 class Layer:
     def __init__(self, num_in, num_out):
         """
-        Creates a neural network layer with the specified number of inputs and the specified number of outputs (nodes/neurons)
+        Creates a random neural network layer with the specified number of inputs and the specified number of outputs (nodes/neurons)
         """
         self.weights, self.biases = he_initialize(num_in, num_out)
 
@@ -24,6 +24,9 @@ class Layer:
         return activation, cache
     
     def backward_pass(self, delta, learning_rate, cache, output_layer=False):
+        """
+        Backpropagate through this neural network layer, updating weights according to the delta and learning rate
+        """
         if not output_layer:
             delta *= (cache[1] > 0).astype(float) # Account for the activation function's effect on outputs in non-output layers
 

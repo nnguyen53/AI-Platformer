@@ -41,7 +41,6 @@ class FloorIsLavaEnv:
         self.game_config = GameConfig()
         self.agent_config = AgentConfig()
         self.target_network = NeuralNetwork([])
-        self.visited_cells = None
         self.visited_platfoms = None
         self.episodes = []
         self.current_episode = {}
@@ -50,7 +49,6 @@ class FloorIsLavaEnv:
         self.steps_since_progress = 0
         self.level_maps = MAPS
         self.level_results = {}
-        self.reset()
 
         # player sprites
         self.sprite_size = 32  # each individual frame in the sheets is 32x32
@@ -108,10 +106,12 @@ class FloorIsLavaEnv:
         return pygame.image.load(path).convert_alpha()
 
     def load_network(self):
+        """Sets the environment's network to the one at self.game_config.NETWORK_LOAD_PATH"""
         if self.game_config.NETWORK_LOAD_PATH is not None:
             self.network.load(resource_path(self.game_config.NETWORK_LOAD_PATH))
 
     def distance_to_goal(self):
+        """Calculates the distance between the player and the goal"""
         return math.sqrt(math.pow(self.player_x - self.goal.x, 2) + math.pow(self.player_y - self.goal.y, 2))
 
     def reset(self):
@@ -123,15 +123,14 @@ class FloorIsLavaEnv:
         self.platforms = map_data["platforms"]
         self.goal = map_data["star"]
         
-        self.vel_x = 0
+        self.vel_x = 0 
         self.vel_y = 0
-        self.is_grounded = False
+        self.is_grounded = False # reset all network-related parameters
         self.done = False
         self.episode_steps = 0
         self.steps_since_progress = 0
 
         self.previous_distance = self.distance_to_goal()
-        self.visited_cells = []
         self.visited_platfoms = [self.platforms[0]]
 
         self.current_episode = {
@@ -147,7 +146,7 @@ class FloorIsLavaEnv:
         return self._get_state()
     
     def _get_state(self):
-        """Returns raw sensor data vectors needs for pyTorch features"""
+        """Returns raw state data to feed as input to the neural network"""
         state = [
             (self.player_x + 15) / self.width,
             (self.player_y + 15) / self.height,
@@ -169,6 +168,8 @@ class FloorIsLavaEnv:
         return listToColumn(tuple(state))
     
     def step(self, action):
+        """Simulates a step (change in state every frame). 
+        Calculates changes in position, action rewards for the agent, and if the game should end"""
         reward = self.agent_config.REWARDS["LIVING_PENALTY"] # to prevent stalling and encourage action
 
         old_distance = self.previous_distance
@@ -270,7 +271,7 @@ class FloorIsLavaEnv:
 
         self.update_sprite()
 
-        # end every episode after 15 seconds
+        # end every episode after MAX_EPISODE_STEPS
 
         if self.game_config.AI_MODE:
             if self.episode_steps > self.agent_config.MAX_EPISODE_STEPS:
@@ -286,6 +287,7 @@ class FloorIsLavaEnv:
         return self._get_state(), reward, self.done
     
     def update_sprite(self):
+        """Update the player spite according to current movement"""
         sprite_sheet = "idle"
 
         # Determine which sheet to use based on physics velocity
@@ -348,7 +350,7 @@ class FloorIsLavaEnv:
             surface.blit(self.current_sprite, (int(self.player_x) - 5, int(self.player_y) - 5))
 
         # Draw raycasts
-        if self.game_config.DRAW_RAYCASTS:
+        if self.game_config.DEBUG_MODE:
             for ray in self.raycast_data:
                 x = self.player_x + 15
                 y = self.player_y + 15
@@ -364,7 +366,7 @@ class FloorIsLavaEnv:
         text_surf = font.render(f"Current Level: {self.current_level}", True, (255, 255, 255))
         surface.blit(text_surf, (20, 20))
 
-        if self.game_config.AI_MODE:
+        if self.game_config.DEBUG_MODE:
             episode_text = font.render(f"Attempt: {self.current_episode["id"]}", True, (255, 255, 255))
             surface.blit(episode_text, (20, 50))
             reward_text = font.render(f"Reward: {self.current_episode["reward"]}", True, (255, 255, 255))
@@ -372,6 +374,10 @@ class FloorIsLavaEnv:
 
         tip_surf = font.render("Press ESC to pause", True, (255, 255, 255))
         surface.blit(tip_surf, (605, 20))
+
+        if self.game_config.AI_MODE:
+            debug_surf = font.render("Press D to toggle debug mode", True, (255, 255, 255))
+            surface.blit(debug_surf, (495, 50))
         
         pygame.display.flip()
 
